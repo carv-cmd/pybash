@@ -5,13 +5,8 @@
 PROGNAME="${0##*/}"
 
 PYVENVS="${HOME}/.py_venvs"
-
 _PYBASH="${HOME}/bin/pybash"
 _BASHPIP="${_PYBASH}/pip-mngr.sh"
-_ACTIVATE="${_PYBASH}/venv-activator.sh"
-
-#_PIP_LOG_DIR="${PYVENVS}/pip-logger"
-#export PROGNAME PYVENVS _PIP_LOG_DIR 
 
 Usage () {
 	cat <<- EOF
@@ -21,22 +16,16 @@ ${PROGNAME} - the stupid venv manager
 usage: ${PROGNAME} [ -c | -r | -i | -u | -f ]  venv <script|pkg>
 
 Examples:
-  ${PROGNAME} [ -c | --create ] pyweb
+  ${PROGNAME} [ -c | --create ] pyweb [ -i ] pip_pkgs
   ${PROGNAME} [ -r | --run ] pyweb scraper.py
-  ${PROGNAME} [ -i | --install ] pyweb requests
-  ${PROGNAME} [ -u | --uninstall ] pyweb requests
-  ${PROGNAME} [ -f | --freeze ] pyweb
 
  Where:
-   --create  venv		=> Create new Python virtual environments (venvs).
-   --run  venv script.py	=> Run 'script.python' in 'venv'.
-   --install  venv pkgs 	=> Install one or more packages into venv with pip.
-   --uninstall  venv pkgs	=> Uninstall one or more packages from venv with pip.
-   --freeze  venv		=> pip freeze venv-requirements.txt.
+   --create  venv		=> Create new bare Python virtual environments (venvs).
+   -c venv -i pkgs		=> Create venv and pip install packages in venv.
+   -r venv script.py		=> Run 'script.python' in 'venv'.
 
-* Omitting[-r]; All options generate name-{pip list, pip freeze}.txt files.
-* These files are writen to the directory '~/py-envs/pip-logger'.
-* Changes to these files are automatically version controlled w/ Git.
+# Sets up vcs for all new venvs in ~/.py_venvs_vcs.
+# Option '-i <pkgs>' must immediately follow '-c venv' else use '~/bin/pippy'.
 
 EOF
 exit 1
@@ -59,7 +48,7 @@ Prog_error () {
 }
 
 Which_print () {
-	echo -e "\n_PY_VENV_PATH: \033[38;5;201m $(which python3) \033[00m"
+	echo -e "\nPY_VENV_PATH: $(which python3)"
 }
 
 Read_py_venvs () {
@@ -67,7 +56,6 @@ Read_py_venvs () {
 	local TARGET="${1}"
 	local PY_SOURCE="${PYVENVS}/${TARGET}/bin/activate" 
 	if [ -e "${PY_SOURCE}" ]; then 
-		#source "${PY_SOURCE}/bin/activate"
 		source "${PY_SOURCE}"
 		Which_print
 	else
@@ -94,51 +82,37 @@ Run_venvs () {
 	fi
 }
 
-Create_venvs () {
-	python3 -m venv "${PYVENVS}/${TARGET}" && 
-		"${_BASHPIP}" --git-freeze "${TARGET}" || 
-		Prog_error 'venvDir'
+Clobber_venv () {
+	# TODO implement venv safe clobber
+	echo "Clobbering Venv: ${1}"
 }
 
-Main_loop () {
-	set -x  # TODO remove
-
-	local TARGET="${KWARGS['target']}"
-	local PIPS="${KWARGS['pips']}"
-	local ARGS="${KWARGS['args']}"
-
- 	if [[ ${KWARGS['mode']} == 'W' ]]; then
-		Write_py_venvs "${TARGET}"
-		Create_venvs "${TARGET}"
-	else
-		if [[ ! "${PIPS}" ]]; then 
-			Read_py_venvs "${TARGET}" 
-			Run_venvs "${TARGET}" "${ARGS}"
-		else
-			# ~/bin/pippy <flag> <venv> <pkgs>
-			"${_BASHPIP}" "${PIPS}" "${TARGET}" "${ARGS[@]}"
-		fi
-	fi
-
-	set +x  # TODO remove
+Create_venvs () {
+	python3 -m venv "${PYVENVS}/${TARGET}" && 
+		"${_BASHPIP}" '-G' "${TARGET}" || 
+		Prog_error 'venvDir'
 }
 
 Parse_args () {
 	declare -A KWARGS
+	local OPTION="${1}"; shift
+	local TARGET="${1}"; shift
+	shift
 
-	KWARGS['option']="${1}"; shift
-	KWARGS['target']="${1}"; shift
-	KWARGS['args']="${@}"
-	KWARGS['mode']=
-
-	case "${KWARGS['option']}" in
+	case "${OPTION}" in
 		-c | --create )
-			KWARGS['mode']='W'
+			Write_py_venvs "${TARGET}"
+			Create_venvs "${TARGET}"
 			;;
-		-i | --install )
-			KWARGS['pips']='-i'
+		-d | --delete )
+			Read_py_venvs "${TARGET}" 
+			Clobber_venv "${TARGET}"
+			return 
 			;;
 		-r | --runpy )
+			Read_py_venvs "${TARGET}" 
+			Run_venvs "${TARGET}" "${2}"
+			return 
 			;;
 		-h | --help )
 			Usage
@@ -146,15 +120,16 @@ Parse_args () {
 		* )
 			Prog_error 'token'
 			;;
-		#-u | --uninstall )
-		#	KWARGS['pips']='-u'
-		#	;;
 	esac
-	Main_loop "${KWARGS[@]}"
+
+	local PIPPY="${1}"; shift
+	if [[ "${PIPPY}" == '-i' ]]; then 
+		"${_BASHPIP}" '-i' "${TARGET}" "${@}"
+	fi
 }
 
 # Passing no parameters fails immediately.
-if [[ ! "${@}" ]]; then
+if [[ ! ${@} ]]; then
 	Usage
 
 # Check if ~/py-envs exists; else create directory.

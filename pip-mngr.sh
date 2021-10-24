@@ -49,28 +49,6 @@ Prog_error () {
 	exit 1
 }
 
-Read_py_venvs () {
-	# If reading operation; must find venv in ~/py-envs.
-
-	set -x  # TODO remove
-	#echo -e "\ncur-venv: $(which python3)\n" || 
-	#[[ "$(echo "$(which python3)" | grep "${TARGET}")" ]] && return 0
-	echo "$(grep "${TARGET}" <<< $(which python3))"
-
-	#echo "$(echo "$(which python3)" | grep "${TARGET}")"
-
-	set +x  # TODO remove
-
-	local PY_SOURCE="${PYVENVS}/${TARGET}/bin/activate" 
-	if [ -e "${PY_SOURCE}" ]; then
-		source "${PY_SOURCE}" && 
-			echo -e "\nactivated: $(which python3)\n" || 
-			Prog_error 'noVenv'
-	else
-		Prog_error 'noVenv'
-	fi
-}
-
 Chk_log_dir () {
 	# Setup git-vcs dir to track venv requirements.txt changes.
 	# Function should only continue to EOL one time.
@@ -90,6 +68,26 @@ Chk_log_dir () {
 	# Checkout main branch 
 	git checkout -b 'main'
 	cd -
+}
+
+Read_py_venvs () {
+	# If reading operation; must find venv in ~/py-envs.
+
+	#echo -e "\ncur-venv: $(which python3)\n" || 
+	#[[ "$(echo "$(which python3)" | grep "${TARGET}")" ]] && return 0
+	#echo "$(echo "$(which python3)" | grep "${TARGET}")"
+	set -x  # TODO remove
+	echo "$(grep "${TARGET}" <<< $(which python3))"
+	set +x  # TODO remove
+
+	local PY_SOURCE="${PYVENVS}/${TARGET}/bin/activate" 
+	if [ -e "${PY_SOURCE}" ]; then
+		source "${PY_SOURCE}" && 
+			echo -e "\nactivated: $(which python3)\n" || 
+			Prog_error 'noVenv'
+	else
+		Prog_error 'noVenv'
+	fi
 }
 
 Pip_freeze () {
