@@ -11,17 +11,18 @@ Usage () {
 
 ${PROGNAME} - the stupid venv pip manager
 
-usage: ${PROGNAME} [ -I | -U | -G | | -f | -l | -s ]  venv pkgs
+usage: ${PROGNAME} [ -I | -U | -G | -c | -f | -l | -s ]  venv pkgs
 
 Examples:
   ${PROGNAME} [ -I ] pyweb requests	= install requests in pyweb
   ${PROGNAME} [ -U ] pyweb requests	= uninstall requests from pyweb
   ${PROGNAME} [ -G ] pyweb		= version control 'pyweb's env build files
-  ${PROGNAME} [ -l | --list ] pyweb	= list all packages installed in pyweb
-  ${PROGNAME} [ -f | --freeze ] pyweb	= generate a requireents.txt file from pyweb
-  ${PROGNAME} [ -s | --show ] pyweb	= show information about installed packages
+  ${PROGNAME} [ -c ] pyweb		= check venv for broken dependencies
+  ${PROGNAME} [ -l ] pyweb		= list all packages installed in pyweb
+  ${PROGNAME} [ -f ] pyweb		= generate a requireents.txt file from pyweb
+  ${PROGNAME} [ -s ] pyweb requests	= show information about installed packages
 
-# ${PROGNAME} keeps global site packages free of dependency collisions.
+# ${PROGNAME} keeps global site packages pristine.
 
 # Noting the odd option '${PROGNAME} [ -G | --git-freeze ] venv'.
 # For use by venv-mngr.sh to track venv when created.
@@ -36,8 +37,8 @@ exit 1
 
 Prog_error () {
 	declare -A ERR
-	ERR['nullArg']='no parameters passed'
-	ERR['token']='unknown command line token'
+	ERR['nullArg']="no parameters passed\n`Usage`"
+	ERR['token']="unknown command line token\n`Usage`"
 	ERR['venvDir']='~/py-envs doesnt exist'
 	ERR['noVenv']='venv doesnt exist'
 	ERR['noPkg']='pip install what package'
@@ -70,11 +71,12 @@ Chk_log_dir () {
 }
 
 Read_py_venvs () {
-	# If reading operation; must find venv in ~/py-envs.
-	local PY_SOURCE="${PYVENVS}/${TARGET}/bin/activate" 
-	if [ -e "${PY_SOURCE}" ]; then
-		source "${PY_SOURCE}" || Prog_error 'noVenv'
-		echo -e "\nactivated: $(which python3)"
+	local ACTIVATOR="${PYVENVS}/${TARGET}/bin/activate" 
+
+	if [ -e "${ACTIVATOR}" ]; then
+		source "${ACTIVATOR}"
+		[[ "${PYSRC}" =~ "$(which python3)" ]] || 
+			Prog_error 'srcErr'
 	else
 		Prog_error 'noVenv'
 	fi
@@ -84,20 +86,21 @@ Git_freeze () {
 	local COMMIT_MSG=
 	local VENVDIR="${PIP_LOGS}/${TARGET}"
 
-	[ ! -e "${VENVDIR}" ] && mkdir "${VENVDIR}"
-	
-	if [ -e "${VENVDIR}/requirements.txt" ]; then 
-		# For existing, upgrades passed as commit msg.
-		shift; FORMAT="\nEnv Modified: %s\nUpgraded: %s\n"
-		printf -v COMMIT_MSG "${FORMAT}" "${TARGET}" "${ARGS}"
-	else
-		# Initial listing & requirement file names passed as commit msg.
-		FORMAT="\nTrackingi New Venv: %s\n"
-		printf -v COMMIT_MSG "${FORMAT}" "${TARGET}"
-	fi
+	[[ "${PYSRC}" =~ "$(which python3)" ]] || 
+		Prog_error 'srcErr'
 
-	# TODO remove
-	echo 'skip vcs'; exit
+	[ ! -e "${VENVDIR}" ] && 
+		mkdir "${VENVDIR}"
+	
+	if [ ! -e "${VENVDIR}/requirements.txt" ]; then 
+		# Initial listing & requirement file names passed as commit msg.
+		FORMAT="\nFreeze/List -> %s\n"
+		printf -v COMMIT_MSG "${FORMAT}" "${TARGET}"
+	else
+		# For existing, upgrades passed as commit msg.
+		FORMAT="\nModified -> %s\nPipped( %s ): %s\n"
+		printf -v COMMIT_MSG "${FORMAT}" "${TARGET}" "${FLAG}" "${ARGS}"
+	fi
 
 	cd "${VENVDIR}"
 	pip3 list > 'listing.txt'
@@ -107,9 +110,36 @@ Git_freeze () {
 	cd -
 }
 
+Pip_mod_venvs () {
+	# Check for VCS enabled logging directory and existing venv.
+	Chk_log_dir && 
+		Read_py_venvs "${TARGET}" || 
+		Prog_error 'noVenv'
+	
+	[[ "${PYSRC}" =~ "$(which python3)" ]] || 
+		Prog_error 'srcErr'
+
+	case "${FLAG}" in 
+		-I | --install )
+			set -x
+			[ -z "${ARGS}" ] && Prog_error 'nullArg'
+			pip3 install ${ARGS} || exit 1
+			set +x
+			;;
+		-U | --uninstall )
+			[ -z "${ARGS}" ] && Prog_error 'nullArg'
+			pip3 uninstall ${ARGS} || exit 1
+			;;
+		-W | --wheel )
+			echo "pip3 wheel --requirement ${ARGS}"
+	esac
+
+	Git_freeze "${FLAG}" "${TARGET}" "${ARGS}" 
+}
+
 Pip_viewer () {
-	Read_py_venvs "${TARGET}"  # Activate python venv before pip 'xyz'
-	case "${1}" in
+	Read_py_venvs "${TARGET}" || Prog_error 'noVenv'
+	case "${FLAG}" in
 		-c | --check )
 			pip3 check
 			;;
@@ -120,52 +150,33 @@ Pip_viewer () {
 			pip3 list
 			;;
 		-s | --show )
-			pip3 show
+			pip3 show "${ARGS}"
 			;;
-		* )
-			exit 1
 	esac
-}
-
-Vcs_flags () {
-	Chk_log_dir  # Check for VCS enabled directory
-	Read_py_venvs "${TARGET}"  # Activate python venv before pip 'xyz'
-	if [[ "${VCSFLAG^}" == U ]]; then
-		[ -z "${ARGS}" ] && 
-			Prog_error 'nullArg'
-		echo -e "\npip3 uninstall ${ARGS}"
-
-	elif [[ "${VCSFLAG^}" == I ]]; then
-		[ -z "${ARGS}" ] && 
-			Prog_error 'nullArg'
-		echo -e "\npip3 install ${ARGS}"
-	fi
-
-	echo -e "\nPip_freeze "${TARGET}" "${ARGS}"\n"
+	echo
 }
 
 Parse_args () {
 	local FLAG="${1}"; shift
 	local TARGET="${1}"; shift
-	local ARGS="${@}"
-	local VCSFLAG=
+	local ARGS=${@}
+	PYSRC="${PYVENVS}/${TARGET}/bin/python3"
 
 	case "${FLAG}" in 
 		-h | --help )
 			Usage
 			;;
 		-[GIU] | --gfreeze | --install | --uninstall )
-			TEMP_VAR="${FLAG##*-}"
-			VCSFLAG="${TEMP_VAR:0:1}"
-			Vcs_flags "${TARGET}" "${VCSFLAG}" "${ARGS}"
+			Pip_mod_venvs "${FLAG}" "${TARGET}" "${ARGS}"
 			;;
 		-[cfls] | --check | --freeze | --list | --show )
-			Pip_viewer "${FLAG}" "${TARGET}"
+			Pip_viewer "${FLAG}" "${TARGET}" "${ARGS}"
 			;;
 		* )
 			Prog_error 'token'
 			;;
 	esac
+	unset 'PYSRC'
 }
 
 if (( $# )); then

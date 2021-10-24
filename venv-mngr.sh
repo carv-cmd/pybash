@@ -15,7 +15,6 @@ ${PROGNAME} - the stupid venv manager
 usage: 
   ${PROGNAME} [ -C | --create ] venv [ -i ] pkgs
   ${PROGNAME} [ -r ]  venv pyfile.py
-  ${PROGNAME} -D venv
 
  Where:
    --create  venv		=> Create new bare Python virtual environments (venvs).
@@ -70,17 +69,13 @@ Create_venvs () {
 	# If venv/directory name already exists; prompt before clobbering that venv.
 	# Use 'pip-mngr.sh' for all post creation venv upgrades.
 
-	#if [ ! -d "${PYVENVS}/${TARGET}" ]; then	
-	#	echo "python3 -m venv "${PYVENVS}/${TARGET}""
-
 	if [ ! -d "${TARGET}" ]; then	
-		echo "python3 -m venv "${TARGET}""
+		python3 -m venv "${TARGET}"
 	else
 		read -p "Clobber existing venv: ${TARGET##*/}? (yes/no)"
 		case "${REPLY}" in 
 			yes ) 
-				#echo "python3 -m venv --clear "${PYVENVS}/${TARGET}""
-				echo "python3 -m venv --clear "${TARGET}""
+				python3 -m venv --clear "${TARGET}"
 				;;
 			y ) 
 				Prog_error 'yesErr'
@@ -90,27 +85,25 @@ Create_venvs () {
 		esac
 	fi
 
-	${BASHPIP} '-G' "${TARGET##*/}" || 
-		exit 1
-
-	[[ "${ARG}" == '-i' ]] &&
-		${BASHPIP} '-i' "${TARGET##*/}" "${@}"
+	set -x 
+	${BASHPIP} '-G' "${TARGET##*/}" &&
+		[[ "${ARG}" == '-i' ]] &&
+		${BASHPIP} '-I' "${TARGET##*/}" "${POSITS}" 
+	set +x
 }
 
 Parse_args () {
 	local OPTION="${1}"; shift
-	#local TARGET="${1}"; shift
 	local TARGET="${PYVENVS}/${1}"; shift
 	local ARG="${1}"; shift
-
+	local POSITS="${@}"
+	
 	case "${OPTION}" in
 		-C | --create )
-			Create_venvs "${TARGET}" "${ARG}" "${@}"
+			Create_venvs "${TARGET}" "${ARG}" "${POSITS}"
 			;;
 		-r | --runpy )
-			#Read_py_venvs "${TARGET}" 
 			Run_venvs "${TARGET}" "${ARG}"
-			return 
 			;;
 		-h | --help )
 			Usage
@@ -119,7 +112,6 @@ Parse_args () {
 			Prog_error 'token'
 			;;
 	esac
-
 }
 
 # Passing no parameters fails immediately.
@@ -128,12 +120,9 @@ if [[ ! ${@} ]]; then
 
 # Check if ~/py-envs exists; else create directory.
 elif [ ! -e "${PYVENVS}" ]; then
-	mkdir "${PYVENVS}" || Prog_error 'venvDir'
-
-else
-	Parse_args "${@}"
-
+	mkdir "${PYVENVS}" || 
+		Prog_error 'venvDir'
 fi
 
-
+Parse_args "${@}"
 
