@@ -97,7 +97,6 @@ Parse_args () {
 	declare -A KWARGS
 	local OPTION="${1}"; shift
 	local TARGET="${1}"; shift
-	shift
 
 	case "${OPTION}" in
 		-c | --create )

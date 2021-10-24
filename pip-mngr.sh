@@ -42,7 +42,6 @@ Prog_error () {
 	ERR['noPkg']='pip install what package'
 	ERR['pipLog']='$PIP_LOG doesnt exist or VCS is disabled'
 	ERR['xPip']='pip (un)install failed'
-	#ERR['noGit']=''
 
 	echo -e "\npip-raised: ${ERR[${1}]}" 
 	unset 'ERR'
@@ -72,13 +71,7 @@ Chk_log_dir () {
 
 Read_py_venvs () {
 	# If reading operation; must find venv in ~/py-envs.
-
-	#echo -e "\ncur-venv: $(which python3)\n" || 
-	#[[ "$(echo "$(which python3)" | grep "${TARGET}")" ]] && return 0
-	#echo "$(echo "$(which python3)" | grep "${TARGET}")"
-	set -x  # TODO remove
 	echo "$(grep "${TARGET}" <<< $(which python3))"
-	set +x  # TODO remove
 
 	local PY_SOURCE="${PYVENVS}/${TARGET}/bin/activate" 
 	if [ -e "${PY_SOURCE}" ]; then
@@ -97,7 +90,6 @@ Pip_freeze () {
 
 	[ ! -e "${VENVDIR}" ] && mkdir "${VENVDIR}"
 	
-	set -x  # TODO remove
 	if [ -e "${VENVDIR}/requirements.txt" ]; then 
 		# For existing, upgrades passed as commit msg.
 		shift; FORMAT="\nEnv Modified: %s\nUpgraded: %s\n"
@@ -107,10 +99,6 @@ Pip_freeze () {
 		FORMAT="\nTrackingVenv: %s\n* listing.txt && requirements.txt *"
 		printf -v COMMIT_MSG "${FORMAT}" "${TARGET}"
 	fi
-	set +x  # TODO remove
-
-	echo "Commit Msg: ${COMMIT_MSG}"
-	exit
 
 	cd "${VENVDIR}"
 	pip3 list > 'listing.txt'
@@ -121,21 +109,14 @@ Pip_freeze () {
 }
 
 Parse_args () {
-	set -x  # TODO remove
-
-	echo ${@}
-	echo "${@}"
-
 	local FLAG="${1}"; shift
 	local TARGET="${1}"; shift
 	local ARGS="${@}"
 	local FREEZE_IT=
-	set +x  # TODO remove
 
 	Chk_log_dir  # Check for VCS enabled directory
 	Read_py_venvs "${TARGET}"  # Activate python venv before pip 'xyz'
 
-	set -x  # TODO remove
 	case "${FLAG}" in 
 		-h | --help )
 			Usage 
@@ -144,11 +125,11 @@ Parse_args () {
 			FREEZE_IT=1
 			;;
 		-i | --install )
-			echo -e "\npip3 install ${ARGS}\n"
+			pip3 install ${ARGS}
 			FREEZE_IT=1
 			;;
 		-u | --uninstall )
-			echo -e "\npip3 uninstall ${ARGS}\n"
+			pip3 uninstall ${ARGS}
 			FREEZE_IT=1
 			;;
 		-f | --freeze )
@@ -169,7 +150,6 @@ Parse_args () {
 		Pip_freeze "${TARGET}" "${ARGS}"
 	fi
 
-	set +x  # TODO remove
 }
 
 Parse_args "${@}"
