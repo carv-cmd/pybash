@@ -5,27 +5,26 @@
 PROGNAME="${0##*/}"
 
 PYVENVS="${HOME}/.py_venvs"
-_PYBASH="${HOME}/bin/pybash"
-_BASHPIP="${_PYBASH}/pip-mngr.sh"
+BASHPIP="${HOME}/bin/pybash/pip-mngr.sh"
 
 Usage () {
 	cat <<- EOF
 
 ${PROGNAME} - the stupid venv manager
 
-usage: ${PROGNAME} [ -c | -r | -i | -u | -f ]  venv <script|pkg>
-
-Examples:
-  ${PROGNAME} [ -c | --create ] pyweb [ -i ] pip_pkgs
-  ${PROGNAME} [ -r | --run ] pyweb scraper.py
+usage: 
+  ${PROGNAME} [ -C | --create ] venv [ -i ] pkgs
+  ${PROGNAME} [ -r ]  venv pyfile.py
+  ${PROGNAME} -D venv
 
  Where:
    --create  venv		=> Create new bare Python virtual environments (venvs).
-   -c venv -i pkgs		=> Create venv and pip install packages in venv.
+   -C venv -i pkgs		=> Create venv and pip install packages in venv.
    -r venv script.py		=> Run 'script.python' in 'venv'.
 
 # Sets up vcs for all new venvs in ~/.py_venvs_vcs.
-# Option '-i <pkgs>' must immediately follow '-c venv' else use '~/bin/pippy'.
+# Option '-i <pkgs>' must immediately follow '-c venv'.
+# To modify venvs after creation use 'pip-mngr.sh' (~/bin/pippy)
 
 EOF
 exit 1
@@ -34,83 +33,83 @@ exit 1
 Prog_error () {
 	declare -A ERR
 	ERR['nullArg']='no parameters passed'
-	ERR['noPy']='script.py doest exist'
-	ERR['noPkg']='pip install what package'
-	ERR['venvDir']='~/py-envs doesnt exist'
-	ERR['isVenv']='venv already exists'
-	ERR['noVenv']='venv doesnt exist'
-	ERR['pipLog']='~/py-envs/pip-logger doesnt exist or VCS is disabled'
 	ERR['token']='unknown option token'
+	ERR['yesErr']="Enter 'yes' to clobber"
+	ERR['venvDir']='~/.py_venvs doesnt exist'
+	ERR['noVenv']='venv doesnt exist'
+	ERR['noPy']='script.py doest exist'
+	ERR['pipLog']='~/.py_venvs_vcs doesnt exist'
+	ERR['noPkg']='pip install what package'
 
-	echo -e "\nraised: ${ERR[${1}]}\n" 
+	echo -e "\nraised: ${ERR[${1}]}\n" >&2
 	unset 'ERR'
-	exit
-}
-
-Which_print () {
-	echo -e "\nPY_VENV_PATH: $(which python3)"
-}
-
-Read_py_venvs () {
-	# If reading operation; must find venv in ~/py-envs.
-	local TARGET="${1}"
-	local PY_SOURCE="${PYVENVS}/${TARGET}/bin/activate" 
-	if [ -e "${PY_SOURCE}" ]; then 
-		source "${PY_SOURCE}"
-		Which_print
-	else
-		Prog_error 'noVenv'
-	fi
-}
-
-Write_py_venvs () {
-	# If writing; venv name must not already exist in ~/py-envs.
-	local TARGET="${1}"
-	[ -d "${PYVENVS}/${TARGET}" ] && 
-		Prog_error 'isVenv'
+	exit 1
 }
 
 Run_venvs () {
-	# Verify python script exists.
-	local _pyfile="${2}"
-	if [ ! -e "${_pyfile}" ]; then
-		Prog_error 'noPy'
-	else
-		# If pyscript and venv exists; un script in that venv.
-		echo "Executing: '$(which python3) ${_pyfile}'"
-		python3 "${_pyfile}"
-	fi
-}
-
-Clobber_venv () {
-	# TODO implement venv safe clobber
-	echo "Clobbering Venv: ${1}"
+	# Activate venv and run file.py in venv. 
+	local PY_SOURCE="${TARGET}/bin/activate" 
+	local PY_FILE="${ARG}"
+	
+	# Verify python virtual environment exists else print usage
+	[ ! -e "${PY_SOURCE}" ] && 
+		Usage >&2
+	
+	# Verify python script exists ($PYFILE <<< $ARG), else exit 1.
+	[[ -n "${PY_FILE}" && -e "${PY_FILE}" ]] || 
+		Usage >&2
+	
+	# Equivlent to `$PY_SOURCE $PY_FILE`.
+	source "${PY_SOURCE}"
+	python3 "${PY_FILE}"
 }
 
 Create_venvs () {
-	python3 -m venv "${PYVENVS}/${TARGET}" && 
-		"${_BASHPIP}" '-G' "${TARGET}" || 
-		Prog_error 'venvDir'
+	# Generate new python virtual enviroments under ~/.py_venvs directory.
+	# Venv build files are tracked with git under ~/.py_venvs_vcs/mirror_name.
+	# If venv/directory name already exists; prompt before clobbering that venv.
+	# Use 'pip-mngr.sh' for all post creation venv upgrades.
+
+	#if [ ! -d "${PYVENVS}/${TARGET}" ]; then	
+	#	echo "python3 -m venv "${PYVENVS}/${TARGET}""
+
+	if [ ! -d "${TARGET}" ]; then	
+		echo "python3 -m venv "${TARGET}""
+	else
+		read -p "Clobber existing venv: ${TARGET##*/}? (yes/no)"
+		case "${REPLY}" in 
+			yes ) 
+				#echo "python3 -m venv --clear "${PYVENVS}/${TARGET}""
+				echo "python3 -m venv --clear "${TARGET}""
+				;;
+			y ) 
+				Prog_error 'yesErr'
+				;;
+			* )
+				exit 1
+		esac
+	fi
+
+	${BASHPIP} '-G' "${TARGET##*/}" || 
+		exit 1
+
+	[[ "${ARG}" == '-i' ]] &&
+		${BASHPIP} '-i' "${TARGET##*/}" "${@}"
 }
 
 Parse_args () {
-	declare -A KWARGS
 	local OPTION="${1}"; shift
-	local TARGET="${1}"; shift
+	#local TARGET="${1}"; shift
+	local TARGET="${PYVENVS}/${1}"; shift
+	local ARG="${1}"; shift
 
 	case "${OPTION}" in
-		-c | --create )
-			Write_py_venvs "${TARGET}"
-			Create_venvs "${TARGET}"
-			;;
-		-d | --delete )
-			Read_py_venvs "${TARGET}" 
-			Clobber_venv "${TARGET}"
-			return 
+		-C | --create )
+			Create_venvs "${TARGET}" "${ARG}" "${@}"
 			;;
 		-r | --runpy )
-			Read_py_venvs "${TARGET}" 
-			Run_venvs "${TARGET}" "${2}"
+			#Read_py_venvs "${TARGET}" 
+			Run_venvs "${TARGET}" "${ARG}"
 			return 
 			;;
 		-h | --help )
@@ -121,10 +120,6 @@ Parse_args () {
 			;;
 	esac
 
-	local PIPPY="${1}"; shift
-	if [[ "${PIPPY}" == '-i' ]]; then 
-		"${_BASHPIP}" '-i' "${TARGET}" "${@}"
-	fi
 }
 
 # Passing no parameters fails immediately.
