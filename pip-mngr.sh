@@ -11,14 +11,15 @@ Usage () {
 
 ${PROGNAME} - the stupid venv pip manager
 
-usage: ${PROGNAME} [ -i | -f | -G | -l | -u ]  venv pkgs
+usage: ${PROGNAME} [ -I | -U | -G | | -f | -l | -s ]  venv pkgs
 
 Examples:
-  ${PROGNAME} [ -i | --install ] pyweb requests		= install requests in pyweb
-  ${PROGNAME} [ -u | --uninstall ] pyweb requests	= uninstall requests from pyweb
-  ${PROGNAME} [ -l | --list ] pyweb		= list all packages installed in pyweb
+  ${PROGNAME} [ -I ] pyweb requests	= install requests in pyweb
+  ${PROGNAME} [ -U ] pyweb requests	= uninstall requests from pyweb
+  ${PROGNAME} [ -G ] pyweb		= version control 'pyweb's env build files
+  ${PROGNAME} [ -l | --list ] pyweb	= list all packages installed in pyweb
   ${PROGNAME} [ -f | --freeze ] pyweb	= generate a requireents.txt file from pyweb
-  ${PROGNAME} [ -G | --git-freeze ] pyweb	= version control 'pyweb's env build files
+  ${PROGNAME} [ -s | --show ] pyweb	= show information about installed packages
 
 # ${PROGNAME} keeps global site packages free of dependency collisions.
 
@@ -26,9 +27,8 @@ Examples:
 # For use by venv-mngr.sh to track venv when created.
 # Additionally, user can commit upgrades if not performed ${PROGNAME}.
 # Calling '${PROGNAME} [ -f | --freeze ]' bypasses vcs and prints 
-
 # These files are writen to the directory '~/py-envs/pip-logger'.
-* Changes to these files are automatically version controlled w/ Git.
+# Changes to these files are automatically version controlled w/ Git.
 
 EOF
 exit 1
@@ -130,8 +130,6 @@ Pip_viewer () {
 Vcs_flags () {
 	Chk_log_dir  # Check for VCS enabled directory
 	Read_py_venvs "${TARGET}"  # Activate python venv before pip 'xyz'
-
-	#set -x 
 	if [[ "${VCSFLAG^}" == U ]]; then
 		[ -z "${ARGS}" ] && 
 			Prog_error 'nullArg'
@@ -144,8 +142,6 @@ Vcs_flags () {
 	fi
 
 	echo -e "\nPip_freeze "${TARGET}" "${ARGS}"\n"
-	#set +x
-	
 }
 
 Parse_args () {
@@ -177,27 +173,6 @@ if (( $# )); then
 else
 	Usage
 fi
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
