@@ -84,12 +84,13 @@ Create_venvs () {
 				exit 1
 		esac
 	fi
-
-	set -x 
-	${BASHPIP} '-G' "${TARGET##*/}" &&
-		[[ "${ARG}" == '-i' ]] &&
-		${BASHPIP} '-I' "${TARGET##*/}" "${POSITS}" 
-	set +x
+	if [[ ! "${ARG}" == '-i' ]]; then 
+		${BASHPIP} '-G' "${TARGET##*/}"
+	else
+		${BASHPIP} '-I' "${TARGET##*/}" "${POSITS}" || {
+			cd "${TARGET%%/*}" && rm -r "${TARGET##*/}"; 
+		}
+	fi 
 }
 
 Parse_args () {
@@ -97,7 +98,6 @@ Parse_args () {
 	local TARGET="${PYVENVS}/${1}"; shift
 	local ARG="${1}"; shift
 	local POSITS="${@}"
-	
 	case "${OPTION}" in
 		-C | --create )
 			Create_venvs "${TARGET}" "${ARG}" "${POSITS}"
@@ -117,7 +117,6 @@ Parse_args () {
 # Passing no parameters fails immediately.
 if [[ ! ${@} ]]; then
 	Usage
-
 # Check if ~/py-envs exists; else create directory.
 elif [ ! -e "${PYVENVS}" ]; then
 	mkdir "${PYVENVS}" || 

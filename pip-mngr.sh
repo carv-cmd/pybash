@@ -44,6 +44,7 @@ Prog_error () {
 	ERR['noPkg']='pip install what package'
 	ERR['pipLog']='$PIP_LOG doesnt exist or VCS is disabled'
 	ERR['xPip']='pip (un)install failed'
+	ERR['noSrc']='source error'
 	echo -e "\nraised: ${ERR[${1}]}\n"
 	unset 'ERR'
 	exit 1
@@ -52,9 +53,7 @@ Prog_error () {
 Chk_log_dir () {
 	# Setup git-vcs dir to track venv requirements.txt changes.
 	# Function should only continue to EOL one time.
-	# If ~/py-envs/PIP_LOGS/.git exists; return 0.
-	[ -e "${PIP_LOGS}/.git" ] && 
-		return 0
+	[ -e "${PIP_LOGS}/.git" ] && return 0
 
 	# If dir exists but no vcs enabled; try git init PIP_LOGS.
 	if [ -e "${PIP_LOGS}" ]; then
@@ -72,11 +71,8 @@ Chk_log_dir () {
 
 Read_py_venvs () {
 	local ACTIVATOR="${PYVENVS}/${TARGET}/bin/activate" 
-
 	if [ -e "${ACTIVATOR}" ]; then
-		source "${ACTIVATOR}"
-		[[ "${PYSRC}" =~ "$(which python3)" ]] || 
-			Prog_error 'srcErr'
+		source "${ACTIVATOR}" || Prog_error 'noSrc'
 	else
 		Prog_error 'noVenv'
 	fi
@@ -86,59 +82,60 @@ Git_freeze () {
 	local COMMIT_MSG=
 	local VENVDIR="${PIP_LOGS}/${TARGET}"
 
-	[[ "${PYSRC}" =~ "$(which python3)" ]] || 
-		Prog_error 'srcErr'
-
-	[ ! -e "${VENVDIR}" ] && 
-		mkdir "${VENVDIR}"
+	# Create directory to store all associated venv build/info files.
+	[ ! -e "${VENVDIR}" ] && mkdir "${VENVDIR}" 
 	
 	if [ ! -e "${VENVDIR}/requirements.txt" ]; then 
-		# Initial listing & requirement file names passed as commit msg.
-		FORMAT="\nFreeze/List -> %s\n"
-		printf -v COMMIT_MSG "${FORMAT}" "${TARGET}"
+		FORMAT="\nNew_Venv -> %s\nInit_Pkgs: %s\n"
+		printf -v COMMIT_MSG "${FORMAT}" "${TARGET}" "${ARGS}"
 	else
-		# For existing, upgrades passed as commit msg.
 		FORMAT="\nModified -> %s\nPipped( %s ): %s\n"
 		printf -v COMMIT_MSG "${FORMAT}" "${TARGET}" "${FLAG}" "${ARGS}"
 	fi
 
-	cd "${VENVDIR}"
-	pip3 list > 'listing.txt'
-	pip3 freeze > 'requirements.txt'
-	git add 'listing.txt' 'requirements.txt'
-	git commit -m "${COMMIT_MSG}"
+	cd "${VENVDIR}" && { 
+		echo "# ${TARGET}" > 'README.md' &&
+			pip3 list > 'listing.txt' &&
+			pip3 freeze > 'requirements.txt' &&
+			git add . && 
+			git commit -m "${COMMIT_MSG}";
+		} || exit 1
 	cd -
 }
 
 Pip_mod_venvs () {
 	# Check for VCS enabled logging directory and existing venv.
-	Chk_log_dir && 
-		Read_py_venvs "${TARGET}" || 
-		Prog_error 'noVenv'
+	Chk_log_dir
+	Read_py_venvs "${TARGET}"
 	
-	[[ "${PYSRC}" =~ "$(which python3)" ]] || 
-		Prog_error 'srcErr'
+	# Triple check correct env was activated before making changes.
+	# Should prevent global site packages from breaking this way?
+	[[ "${PYSRC}" =~ $(which python3) ]] || 
+		Prog_error 'noSrc'
+
+	[[ -z "${ARGS}" && ! "${FLAG}" =~ ^(-G|--gfreeze)$ ]] &&
+		Prog_error 'nullArg'
 
 	case "${FLAG}" in 
 		-I | --install )
-			set -x
-			[ -z "${ARGS}" ] && Prog_error 'nullArg'
 			pip3 install ${ARGS} || exit 1
-			set +x
 			;;
 		-U | --uninstall )
-			[ -z "${ARGS}" ] && Prog_error 'nullArg'
 			pip3 uninstall ${ARGS} || exit 1
 			;;
 		-W | --wheel )
+			# TODO implement wheels
 			echo "pip3 wheel --requirement ${ARGS}"
+			;;
 	esac
 
 	Git_freeze "${FLAG}" "${TARGET}" "${ARGS}" 
 }
 
 Pip_viewer () {
-	Read_py_venvs "${TARGET}" || Prog_error 'noVenv'
+	# Activate venv and pip <info>
+	Read_py_venvs "${TARGET}" || 
+		Prog_error 'noVenv'
 	case "${FLAG}" in
 		-c | --check )
 			pip3 check
