@@ -109,10 +109,10 @@ Pip_mod_venvs () {
 	Read_py_venvs "${TARGET}"
 	
 	# Triple check correct env was activated before making changes.
-	# Should prevent global site packages from breaking this way?
 	[[ "${PYSRC}" =~ $(which python3) ]] || 
 		Prog_error 'noSrc'
 
+	# Must pass pkg names to either install or uninstall
 	[[ -z "${ARGS}" && ! "${FLAG}" =~ ^(-G|--gfreeze)$ ]] &&
 		Prog_error 'nullArg'
 
@@ -153,7 +153,7 @@ Pip_viewer () {
 	echo
 }
 
-Parse_args () {
+Parse_args () {	
 	local FLAG="${1}"; shift
 	local TARGET="${1}"; shift
 	local ARGS=${@}
