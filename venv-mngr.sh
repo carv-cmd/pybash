@@ -102,6 +102,9 @@ Parse_args () {
 		-C | --create )
 			Create_venvs "${TARGET}" "${ARG}" "${POSITS}"
 			;;
+		-l | --list )
+			[ -e "${PYVENVS}" ] && ls $PYVENVS
+			;;
 		-r | --runpy )
 			Run_venvs "${TARGET}" "${ARG}"
 			;;
