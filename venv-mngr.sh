@@ -60,7 +60,7 @@ Run_venvs () {
 	
 	# Equivlent to `$PY_SOURCE $PY_FILE`.
 	source "${PY_SOURCE}"
-	python3 "${PY_FILE}"
+	python3 ${PY_FILE} ${POSITS}
 }
 
 Create_venvs () {
@@ -98,12 +98,16 @@ Parse_args () {
 	local TARGET="${PYVENVS}/${1}"; shift
 	local ARG="${1}"; shift
 	local POSITS="${@}"
+
 	case "${OPTION}" in
 		-C | --create )
 			Create_venvs "${TARGET}" "${ARG}" "${POSITS}"
 			;;
+		-l | --list )
+			[ -e "${PYVENVS}" ] && ls $PYVENVS
+			;;
 		-r | --runpy )
-			Run_venvs "${TARGET}" "${ARG}"
+			Run_venvs "${TARGET}" "${ARG}" "${POSITS}"
 			;;
 		-h | --help )
 			Usage
