@@ -1,14 +1,14 @@
 #!/bin/bash
 
-PYVENVS=~/.py_venvs
-VENV_NAME="$PYVENVS/$1/bin/activate"; shift
+PYVENVS=${PYVENVS:-~/.py_venvs}
+RUN_VENV="$PYVENVS/$1/bin/activate"; shift
 PYFILE="$1"; shift
 ARGS="$@"
 
 
 Usage () {
     PROGNAME="${0##*/}"
-    echo "usage: $PROGNAME PY_VENV PY_FILE" >&2
+    echo "usage: $PROGNAME PY_VENV PY_FILE" > /dev/stderr
 }
 
 Error () {
@@ -16,13 +16,13 @@ Error () {
     exit 1
 }
 
-if [ ! -f "$VENV_NAME" ]; then
-    Usage; Error "cant activate: $VENV_NAME"
+if [ ! -f "$RUN_VENV" ]; then
+    Usage; Error "cant activate: $RUN_VENV"
 elif [ ! -f "$PYFILE" ]; then
     Usage; Error "$PYFILE: doesn't exist"
 fi
 
-if source $VENV_NAME; then
+if source $RUN_VENV; then
     python3 $PYFILE $ARGS
 fi
 

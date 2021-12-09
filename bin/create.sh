@@ -1,5 +1,6 @@
 #!/bin/bash
 
+BASHPIP=~/bin/pybash/bin/pips.sh
 
 sh_c='sh -c'
 ECHO=${ECHO:-}
@@ -7,7 +8,7 @@ ECHO=${ECHO:-}
 
 PYVENVS=${PYVENVS:-~/.py_venvs}
 PIP_LOGS=${PIP_LOGS:-~/.py_venvs_vcs}
-BASHPIP=~/bin/pybash/bin/pips.sh
+export ECHO PYVENVS PIP_LOGS
 
 VENV_NAME="$1"; shift
 OPTION="$1"; shift
@@ -16,7 +17,7 @@ ARGS="$@"
 
 Usage () {
     PROGNAME="${0##*/}"
-    cat <<- EOF
+    cat >&2 <<- EOF
 The stupid venv manager
 usage: venvpy ${PROGNAME%.*} VENV_NAME [ --install PKGS | --file file.txt ]
 force: venvpy ${PROGNAME%.*} VENV_NAME [ --clear ][ -I PKGS | -F file.txt ]
@@ -53,20 +54,16 @@ create_environment () {
     fi
 }
 
-setup_tracking () { 
-    $sh_c "$BASHPIP -G $VENV_NAME"
-}
-
-pip_install () {
+pip_install_pkgs() {
     $sh_c "$BASHPIP $VENV_NAME -I $ARGS"
 }
 
 pip_requirements () {
-    check_requirements_file
+    requirements_exist
     $sh_c "$BASHPIP $VENV_NAME -F $ARGS"
 }
 
-check_requirements_file () {
+requirements_exist () {
     if [ ! -f "$ARGS" ]; then
         Error "$ARGS: doesn't exist"
     fi
@@ -76,10 +73,9 @@ check_requirements_file () {
 [[ "$OPTION" =~ ^-(I|F|-clear)$ ]] && CLEAR='--clear'
 catch_overwrites
 create_environment
-setup_tracking
 
 if [[ "$OPTION" =~ ^--?(I|i(nstall)?)$ ]]; then
-    pip_install
+    pip_install_pkgs
 elif [[ "$OPTION" =~ ^--?(F|f(ile)?)$ ]]; then
     pip_requirements
 fi

@@ -11,9 +11,9 @@ sh_c='sh -c'
 ECHO=${ECHO:-}
 [ "$ECHO" ] && sh_c='echo'
 
-PYBIN=~/bin/pybash/bin
-PYVENVS=~/.py_venvs
-PIP_LOGS=~/.py_venvs_vcs
+PYBIN=${PYBIN:-~/bin/pybash/bin}
+PYVENVS=${PYVENVS:-~/.py_venvs}
+PIP_LOGS=${PIP_LOGS:-~/.py_venvs_vcs}
 export ECHO PYBIN PYVENVS PIP_LOGS
 
 SUBCMD="$1"; shift
@@ -24,7 +24,6 @@ Usage () {
     PROGNAME="${0##*/}"
     cat <<- EOF
 The stupid venv manager
-
 $PROGNAME create VENV_NAME [ --install PKG_NAME(s) | --file requirements.txt ]
 $PROGNAME [run] VENV_NAME PYTHON_SCRIPT
 $PROGNAME pips --help 
@@ -33,6 +32,7 @@ Subcommands:
  create     Create new Python virtual environment VENV_NAME.
  pips       Pip install PKG_NAME(s) in VENV_NAME.
  run        Activate VENV_NAME then run PYFILE.
+ sanity     Make $PYVENVS/sanitychk.py file.
  help       Print this help message and exit.
 
 EOF
@@ -68,5 +68,5 @@ valid_subcmd () {
 
 valid_subcmd
 try_defaults
-$PYBIN/$SUBCMD.sh $ARGS
+$PYBIN/$SUBCMD.sh $ARGS 
 

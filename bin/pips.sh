@@ -1,204 +1,141 @@
-#!/bin/bash
+#!/bin/bash 
 
-# pip-mngr.sh: Pip manager, manager for sibling venv-mngr.sh.
+sh_c='sh -c'
+ECHO=${ECHO:-}
+[ "$ECHO" ] && sh_c='echo'
 
-PROGNAME="${0##*/}"
-PYVENVS=~/.py_venvs
-PIP_LOGS=~/.py_venvs_vcs
+PYVENVS=${PYVENVS:-~/.py_venvs}
+PIP_LOGS=${PIP_LOGS:-~/.py_venvs_vcs}
+
+VENV_NAME="$1"; shift
+OPTION="$1"; shift
+ARGS="$@"
 
 
 Usage () {
-	cat <<- EOF
+    PROGNAME="${0##*/}"
+    cat >&2 <<- EOF
+the stupid venv pip manager
 
-$PROGNAME - the stupid venv pip manager
+modify: $PROGNAME VENV_NAME [ -I | -U | -G | -F | -M ] PKG_NAME(s)
+view: $PROGNAME [-c | -l | -s | -f ] VENV_NAME
 
-usage: $PROGNAME [ -I | -U | -G | -c | -f | -l | -s ] VENV_NAME [ PKG_NAME(s) ]
+Modify:
+ --git-venv         Track VENV_NAME build files.
+ -I, --install      Install PKG_NAME(s) in VENV_NAME.
+ -U, --uninstall    Uninstall PKG_NAME(s) from VENV_NAME.
+ -F, --use-file     Install from requirements.txt file.
+ -M, --mk-files     Create requirements.txt from VENV_NAME
 
-==============================================================
-
-Modifier Examples:
-  ./$PROGNAME -I pyweb requests	= install requests in pyweb
-  ./$PROGNAME -U pyweb requests	= uninstall requests from pyweb
-  ./$PROGNAME -G pyweb		= version control 'pyweb's env build files
-
-Viewer Examples:
-  ./$PROGNAME -c pyweb		= check venv for broken dependencies
-  ./$PROGNAME -l pyweb		= list all packages installed in pyweb
-  ./$PROGNAME -f pyweb		= generate a requireents.txt file from pyweb
-  ./$PROGNAME -s pyweb aiodns	= show information about installed packages
-
-Dry-Run:
-  DRY_RUN=true ./$PROGNAME -I pyweb requests
-
-==============================================================
-# $PROGNAME attempts to keep global site packages pristine.
-* no guaruntees w/o warranty *
-
-# The following pertains to: $PROGNAME [ -G | --git-freeze ] VENV
-# -gfreeze main use by 'venv-mngr.sh' to setup vcs on creation.
-# Additionally, changes made externally w/o $PROGNAME can be committed.
-# These files are writen to the directory '~/py_venvs_vcs/\$VENV'.
-# Pippy automatically commits any changes made to the assoiated build files.
-# See comments in '${PROGNAME}.Git_freeze' for more details.
-
-# Calling '$PROGNAME [ -f | --freeze ] VENV' sends requirements to stdout.
+Inspect:
+ -c, --check        Check VENV_NAME for broken dependencies.
+ -l, --list         List all packages installed in VENV_NAME.
+ -s, --show         Show information about PKG_NAME(s) in VENV_NAME.
+ -f, --freeze       Pip freeze VENV_NAME to stdout.       
 
 EOF
 exit 1
 }
 
-Prog_error () {
-	declare -A ERR
-	ERR['nullArg']="no parameters passed\n`Usage`"
-	ERR['token']="unknown command line token\n`Usage`"
-	ERR['venvDir']='~/py-envs doesnt exist'
-	ERR['noVenv']='venv doesnt exist'
-	ERR['noPkg']='pip install what package'
-	ERR['pipLog']="$PIP_LOGS doesnt exist or VCS is disabled"
-	ERR['xPip']='pip (un)install failed'
-	ERR['noSrc']='source error'
-	echo -e "\nraised: ${ERR[${1}]}\n"
-	unset 'ERR'
-	exit 1
+Error () {
+    echo -e "error: $1\n" > /dev/stderr
+    exit 1
 }
 
-Chk_log_dir () {
-	# Setup git-vcs dir to track venv requirements.txt changes.
-	# Function should only continue to EOL one time.
-	[ -e "${PIP_LOGS}/.git" ] && return 0
-
-	# If dir exists but no vcs enabled; try git init PIP_LOGS.
-	if [ -e "$PIP_LOGS" ]; then
-		$sh_c "cd $PIP_LOGS" && $sh_c "git init" || 
-			Prog_error 'pipLog'
-	else
-		$sh_c "git init $PIP_LOGS" && $sh_c "cd $PIP_LOGS" || 
-			Prog_error 'pipLog'
-	fi
-	# TODO Checkout which branch ?
-	# $sh_c "git checkout -b 'develop'"
-	cd -
+read_py_venvs () {
+    ACTIVATE_VENV="$PYVENVS/$VENV_NAME/bin/activate"
+    if ! source "$ACTIVATE_VENV"; then
+        Error "couldnt source: $VENV_NAME"
+    fi
 }
 
-Read_py_venvs () {
-	# Assign $ACTIVATOR w/ 'should-be-path' to venv activation script.
-	# Assign $PYSRC 'should-be-path' venv executable path.
-	local ACTIVATOR="${PYVENVS}/${TARGET}/bin/activate" 
-	PYSRC="${PYVENVS}/${TARGET}/bin/python3"
-
-	# If $ACTIVATOR found, source and export venv path executable.
-	if [ -e "$ACTIVATOR" ]; then
-		source "$ACTIVATOR" || Prog_error 'noSrc'
-	else
-		Prog_error 'noVenv'
-	fi
+check_log_dir () {
+    if [ ! -d "$PIP_LOGS/.git" ]; then
+        git_init_pip_logs
+    fi
 }
 
-Git_freeze () {
-	# (Create/Use) ~/.py_venvs_vcs/$VENV for associated venv build/helper files.
-	# In $VENV_VCS_DIR, the following files are generated and changes committed:
-	# 1. 'README.md': include $VENV description/use-cases/etc.
-	# 2. 'listing.txt': lists all packages in $VENV 
-	# 3. 'requirements.txt': $VENV dependencies (rollback)
-	local COMMIT_MSG=
-	local VENVDIR="$PIP_LOGS/$TARGET"
-	if [ ! -e "$VENVDIR" ]; then
-		$sh_c "git init $VENVDIR" || Prog_error 'noVcs'
-	fi
-	
-	# Msg output dependent on new or existing venvs
-	[ ! -e "${VENVDIR}/requirements.txt" ] &&
-		FMT_MSG="initial" || FMT_MSG="modify"
-	printf -v COMMIT_MSG "$FMT_MSG: $FLAG: $TARGET: $ARGS"
-	
-	# Switch to venv-vcs dir and publish changes
-	$sh_c "cd $VENVDIR && 
-		echo \"# $TARGET\" > README.md && 
-		pip3 list > listing.txt && 
-		pip3 freeze > requirements.txt && 
-		git add . && 
-		git commit -m '${COMMIT_MSG}' && 
-		cd -;
-	"
+git_init_pip_logs () {
+    if ! $sh_c "git init $PIP_LOGS"; then
+        Error 'no .py_venvs_vcs/.git'
+    fi
 }
 
-Pip_mod_venvs () {
-	# Check for VCS enabled logging directory + existing venv.
-	Read_py_venvs "$TARGET"
-	
-	# Triple check correct env was activated before making changes.
-	if [[ ! "$PYSRC" =~ $(which python3) ]]; then
-		Prog_error 'noSrc'
-	# If prior checks passed and --gfreeze was flag, return early.
-	elif [[ "$FLAG" =~ ^(-G|--gfreeze)$ ]]; then
-		return 0
-	# Else un|install requires pkg arguments.
-	elif [[ -z "$ARGS" ]]; then
-		Prog_error 'nullArg'
-	fi
-
-	case "$FLAG" in 
-		-I | --install )
-			$sh_c "pip3 install $ARGS" || exit 1
-			;;
-		-U | --uninstall )
-			$sh_c "pip3 uninstall $ARGS" || exit 1
-			;;
-		-W | --wheel )
-			# TODO implement `pip3 wheel --requirement $ARGS`
-			echo 'raise: NotImplementedError'
-			exit 1
-			;;
-	esac
+pip_from_requirements () {
+    [ ! -r "$ARGS" ] && Error "failed: requirements.txt ?= $ARGS"
+    pip_action "install -r $ARGS"
 }
 
-Pip_viewer () {
-	# Activate venv, then pip <option>
-	Read_py_venvs "$TARGET" 
-	case "$FLAG" in
-		-c | --check )  pip3 check ;;
-		-f | --freeze )  pip3 freeze ;;
-		-l | --list )  pip3 list ;;
-		-s | --show )  pip3 show "$ARGS" ;;
-	esac
+pip_action () {
+    local PIP_STRING="$1"
+    if ! $sh_c "pip3 $PIP_STRING"; then
+        Error "fatal: pip3 $PIP_STRING"
+    fi
+    track_build
 }
 
-Chk_option () {
-	if [[ "$FLAG" =~ ^$2$ ]]; then
-		return 0
-	else
-		return 1
-	fi
+track_build () {
+    COMMIT_MSG=
+    if cd $PIP_LOGS; then
+        [ ! -d "$VENV_NAME" ] && $sh_c "mkdir $VENV_NAME"
+        commit_type
+        add_build_files && make_commit
+    fi
 }
 
-Parse_args () {	
-	local FLAG="$1"; shift
-	local TARGET="$1"; shift
-	local ARGS=${@}
-
-	if Chk_option "$FLAG" '^-(h|-help)'; then
-		Usage
-
-	elif Chk_option "$FLAG" '-(-gfreeze|G|-install|I|-uninstall|U)'; then
-		Pip_mod_venvs "$FLAG" "$TARGET" "$ARGS" &&
-			Git_freeze "$FLAG" "$TARGET" "$ARGS" "$COMMIT_MSG"
-
-	elif Chk_option "$FLAG" '-(-check|c|-freeze|f|-list|l|-show|s)'; then
-		Pip_viewer "$FLAG" "$TARGET" "$ARGS"
-	
-	else	
-		Prog_error 'token'
-	fi
+commit_type () {
+    local COMMIT_TYPE='initial'
+    [ -f "$VENV_NAME/requirements.txt" ] && FMT_MSG="modify"
+    COMMIT_MSG="$COMMIT_TYPE: $VENV_NAME: $ARGS"
 }
 
-# Set env-variabale true to 'dry run' worker operations
-if [ -n "$DRY_RUN" ] && "$DRY_RUN"; then
-	sh_c='echo'
-	set -x
-else
-	sh_c='sh -c'
+add_build_files () {
+    cd "$VENV_NAME" || return 1
+    echo -e "# $VENV_NAME\n" > README.md
+    pip3 list > listing.txt
+    pip3 freeze > requirements.txt
+    cd - > /dev/null
+}
+
+make_commit () {
+    git add . && git commit -m "$COMMIT_MSG"
+}
+
+pip_modify () {
+    check_log_dir
+    case "$OPTION" in
+        --git-venv ) track_build;;
+        -I | --install ) pip_action "install $ARGS";;
+        -F | --file ) pip_from_requirements "$ARGS";;
+        -U | --uninstall ) pip_action "uninstall $ARGS";;
+        -W | --wheel ) echo 'raise: NotImplementedError';;
+        * ) Usage
+    esac
+}
+
+pip_views () {
+    case "$OPTION" in
+        -c | --check ) pip3 check;;
+        -f | --freeze ) pip3 freeze;;
+        -l | --list )  pip3 list;;
+        -s | --show ) pip3 show $ARGS;;
+        * ) Usage
+    esac
+}
+
+switch_case_names () {
+    local TMP="$VENV_NAME"
+    VENV_NAME="$OPTION"
+    OPTION="$TMP"
+}
+
+#######
+pip_mode='pip_modify'
+if [[ "$VENV_NAME" =~ ^--?(c|f|l|s) ]]; then
+    switch_case_names
+    pip_mode='pip_views'
 fi
 
-(( $# )) && Parse_args "$@" || Usage
-unset 'PYSRC'
+read_py_venvs "$VENV_NAME"
+$pip_mode 
 
