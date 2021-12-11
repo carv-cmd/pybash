@@ -32,6 +32,7 @@ Inspect:
  -l, --list         List all packages installed in VENV_NAME.
  -s, --show         Show information about PKG_NAME(s) in VENV_NAME.
  -f, --freeze       Pip freeze VENV_NAME to stdout.       
+ -p, --pyvenvs      List all environments in PYVENVS.
 
 EOF
 exit 1
@@ -71,7 +72,6 @@ pip_action () {
     if ! $sh_c "pip3 $PIP_STRING"; then
         Error "fatal: pip3 $PIP_STRING"
     fi
-    track_build
 }
 
 track_build () {
@@ -101,26 +101,30 @@ make_commit () {
     git add . && git commit -m "$COMMIT_MSG"
 }
 
+###
 pip_modify () {
     check_log_dir
     case "$OPTION" in
-        --git-venv ) track_build;;
+        --git-venv );;
         -I | --install ) pip_action "install $ARGS";;
         -F | --file ) pip_from_requirements "$ARGS";;
         -U | --uninstall ) pip_action "uninstall $ARGS";;
         -W | --wheel ) echo 'raise: NotImplementedError';;
         * ) Usage
     esac
+    track_build
 }
 
 pip_views () {
+    local run_pip=
     case "$OPTION" in
-        -c | --check ) pip3 check;;
-        -f | --freeze ) pip3 freeze;;
-        -l | --list )  pip3 list;;
-        -s | --show ) pip3 show $ARGS;;
-        * ) Usage
+        -c | --check ) run_pip='check';;
+        -f | --freeze ) run_pip='freeze';;
+        -l | --list ) run_pip='list';;
+        -s | --show ) run_pip="show $ARGS";;
+        * ) Usage;;
     esac
+    pip_action "$run_pip"
 }
 
 switch_case_names () {
@@ -129,9 +133,20 @@ switch_case_names () {
     OPTION="$TMP"
 }
 
-#######
+list_venvs () {
+    ls $PYVENVS
+    exit
+}
+
+###
 pip_mode='pip_modify'
-if [[ "$VENV_NAME" =~ ^--?(c|f|l|s) ]]; then
+if [[ "$VENV_NAME" =~ ^-{0,2}h(elp)?$ ]]; then
+    Usage
+
+elif [[ "$VENV_NAME" =~ ^-{0,2}p(yvenvs)?$ ]]; then
+    list_venvs
+
+elif [[ "$VENV_NAME" =~ ^--?(c|f|l|s|p) ]]; then
     switch_case_names
     pip_mode='pip_views'
 fi
