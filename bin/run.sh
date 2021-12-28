@@ -1,8 +1,8 @@
 #!/bin/bash
 
 PYVENVS=${PYVENVS:-~/.py_venvs}
+
 RUN_VENV="$PYVENVS/$1/bin/activate"; shift
-PYFILE="$1"; shift
 ARGS="$@"
 
 
@@ -16,13 +16,18 @@ Error () {
     exit 1
 }
 
+find_venv () {
+    if [ -f "$RUN_VENV" ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+
 if [ ! -f "$RUN_VENV" ]; then
     Usage; Error "cant activate: $RUN_VENV"
-elif [ ! -f "$PYFILE" ]; then
-    Usage; Error "$PYFILE: doesn't exist"
-fi
-
-if source $RUN_VENV; then
-    python3 $PYFILE $ARGS
+elif source $RUN_VENV; then
+    python3 $ARGS
 fi
 
