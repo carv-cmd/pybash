@@ -70,7 +70,12 @@ requirements_exist () {
 }
 
 
-[[ "$OPTION" =~ ^-(I|F|-clear)$ ]] && CLEAR='--clear'
+if [[ "$VENV_NAME" =~ ^--?h(elp)?$ ]]; then
+    Usage
+elif [[ "$OPTION" =~ ^-(I|F|-clear)$ ]]; then
+    CLEAR='--clear'
+fi
+
 catch_overwrites
 create_environment
 
